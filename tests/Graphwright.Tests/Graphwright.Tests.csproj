@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Graphwright.Domain\Graphwright.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Graphwright.Application\Graphwright.Application.csproj" />
+    <ProjectReference Include="..\..\src\Graphwright.Infrastructure\Graphwright.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Graphwright.McpServer\Graphwright.McpServer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,134 @@
+###############################################################################
+# .NET / MSBuild
+###############################################################################
+
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# NuGet packages (restored to global cache; never committed)
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+# Central Package Management lock file — commit if you want reproducible restores
+# packages.lock.json
+
+# MSBuild Binary and Source Logs
+*.binlog
+*.sarif
+
+# .NET publish output
+publish/
+PublishProfiles/
+
+# Test results and coverage
+TestResults/
+[Cc]overage*/
+*.coverage
+*.coveragexml
+coverage.json
+coverage.cobertura.xml
+
+# .NET secrets (never commit)
+secrets.json
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json.example
+
+###############################################################################
+# Visual Studio
+###############################################################################
+
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.pidb
+*.svd
+*.pdb
+
+# Visual Studio Code Metrics
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Backup and swap
+*.[Bb]ackup
+*.bak
+*.tmp
+*~
+
+###############################################################################
+# JetBrains Rider / ReSharper
+###############################################################################
+
+.idea/
+_ReSharper*/
+*.DotSettings.user
+*.resharper
+
+###############################################################################
+# VS Code
+###############################################################################
+
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+###############################################################################
+# OS-generated
+###############################################################################
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+
+###############################################################################
+# Secrets and environment
+###############################################################################
+
+.env
+.env.*
+*.pfx
+*.p12
+*.key
+*.pem
+*.cer
+launchSettings.json
+
+###############################################################################
+# SQLite (Graphwright graph store)
+###############################################################################
+
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+###############################################################################
+# Specwright / Claude artifacts (keep specs, ignore generated scratch files)
+###############################################################################
+
+.claude/scratchpad/

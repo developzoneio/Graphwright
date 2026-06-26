@@ -1,0 +1,139 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Developzone/specwright/main/schema/project-config.schema.json",
+  "version": "1.0.0",
+
+  "project": {
+    "name": "Graphwright",
+    "description": "Roslyn-native code graph engine for .NET, exposed as an MCP server",
+    "owner": "developzoneio",
+    "repo": "https://github.com/developzoneio/Graphwright"
+  },
+
+  "ticket": {
+    "system": "jira",
+    "pattern": "^[A-Z]+-[0-9]+$",
+    "baseUrl": "https://trminhtrong.atlassian.net/browse",
+    "snapshot": {
+      "enabled": true,
+      "maxRelated": 5,
+      "maxConfluencePages": 3,
+      "_use": "Persist fetched ticket + related tickets + linked Confluence pages to .specs/<ID>/04-artifacts/ticket/"
+    }
+  },
+
+  "spec": {
+    "dir": ".specs",
+    "indexFile": ".specs/index.md",
+    "constitutionFile": ".specs/constitution.md",
+    "prefixes": {
+      "feature": "FEAT",
+      "bug": "BUG",
+      "refactor": "REF",
+      "perf": "PERF",
+      "rca": "RCA"
+    },
+    "lifecycle": ["draft", "approved", "in-progress", "done", "archived"],
+    "archiveAfterDays": 90
+  },
+
+  "commands": {
+    "build": "dotnet build Graphwright.sln -c Release",
+    "test": "<<e.g. dotnet test --no-build>>",
+    "lint": "<<e.g. dotnet format --verify-no-changes>>",
+    "coverage": "<<e.g. dotnet test /p:CollectCoverage=true>>",
+    "run": "<<e.g. dotnet run --project src/Graphwright.McpServer>>"
+  },
+
+  "paths": {
+    "src": "src",
+    "tests": "tests",
+    "docs": "<<e.g. docs>>",
+    "layers": [
+      { "name": "Domain", "path": "**/Graphwright.Domain/**" },
+      { "name": "Application", "path": "**/Graphwright.Application/**" },
+      { "name": "Infrastructure", "path": "**/Graphwright.Infrastructure/**" },
+      { "name": "McpServer", "path": "**/Graphwright.McpServer/**" }
+    ],
+    "_layers_use": "Ordered inside-out [{name, path}] (innermost first); path may be a glob. Backs constitution 1.1 dependency direction. Filled by /sd:setup scan; [] when undetectable.",
+    "protected": [
+      ".specs/constitution.md",
+      ".specs/index.md",
+      "LICENSE"
+    ]
+  },
+
+  "workflow": {
+    "keywords": {
+      "bug": ["bug", "fix", "broken", "error", "crash", "regression", "defect"],
+      "feature": ["feature", "add", "implement", "new", "support"],
+      "refactor": ["refactor", "restructure", "clean up", "extract", "rename"],
+      "perf": ["perf", "performance", "slow", "optimize", "latency", "throughput"],
+      "rca": ["incident", "outage", "rca", "root cause", "post-mortem", "postmortem"]
+    },
+    "gates": {
+      "feature": ["spec-approved", "plan-approved", "review-pass", "integration-pass"],
+      "bug": ["symptom-captured", "reproduction-confirmed", "root-cause-confirmed", "failing-test-written", "regression-pass"],
+      "rca": ["evidence-gathered", "hypotheses-enumerated", "root-cause-confirmed"],
+      "refactor": ["spec-approved", "coverage-threshold-met", "post-test-added", "plan-approved", "batch-tests-green", "holistic-review-pass"],
+      "perf": ["target-defined", "baseline-measured", "hotspot-identified", "hypothesis-selected", "correctness-verified", "keep-or-revert-decided", "regression-pass", "final-review-pass"]
+    }
+  },
+
+  "models": {
+    "main": "sonnet",
+    "subagent_default": "haiku",
+    "subagent_reasoning": "sonnet",
+    "subagent_execution": "haiku",
+    "_comment": "Portable aliases (sonnet/haiku) — resolved to the current recommended version by Claude Code at runtime. Agents also use these aliases in frontmatter."
+  },
+
+  "mcp": {
+    "atlassian": {
+      "enabled": true,
+      "_use": "Fetch JIRA tickets (+ related tickets and linked Confluence pages) in /sd:feature and /sd:bug"
+    },
+    "context7": {
+      "enabled": true,
+      "_use": "Up-to-date library docs for sd-spec-architect and sd-implementer"
+    },
+    "sequential-thinking": {
+      "enabled": true,
+      "_use": "Structured hypothesis enumeration in sd-debugger and sd-reviewer"
+    },
+    "gitnexus": {
+      "enabled": true,
+      "_use": "Fast symbol search, callers, call graph for sd-code-explorer"
+    },
+    "mssql": {
+      "enabled": true,
+      "_use": "Read-only schema and query-plan inspection in sd-debugger (SELECT/EXPLAIN only)"
+    },
+    "playwright": {
+      "enabled": true,
+      "_use": "E2E reproduction for /sd:bug"
+    },
+    "tavily": {
+      "enabled": true,
+      "_use": "Web search for error signatures / library issues in sd-debugger"
+    }
+  },
+
+  "hooks": {
+    "userPromptRouter": {
+      "enabled": true,
+      "_use": "Keyword routing + spec-context injection on every user prompt"
+    },
+    "specGate": {
+      "enabled": true,
+      "mode": "warn",
+      "_modes": "block = refuse Edit/Write on code without in-progress spec; warn = log to stderr only; off = skip",
+      "_use": "Guard rail blocking code edits when no spec is in-progress"
+    },
+    "subagentRetro": {
+      "enabled": true,
+      "retroStaleMinutes": 30,
+      "debounceMinutes": 10,
+      "_use": "Reminder to update stale retros after subagent runs"
+    }
+  }
+}
