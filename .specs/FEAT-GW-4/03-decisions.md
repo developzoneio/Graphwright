@@ -2,6 +2,21 @@
 
 > Running log of impact findings and decisions for the MCP server scaffold story.
 
+## Phase 5a diagnosis — lint gate failure (2026-07-02)
+
+`dotnet format --verify-no-changes` failed on two fronts after T01–T19:
+1. ENDOFLINE (LF vs CRLF) across all new .cs files — auto-fixed inline with `dotnet format`.
+2. IDE1006 naming violations with no auto-fix: (a) `.editorconfig` rule `constants_all_upper`
+   (constants at ANY accessibility must be ALL_UPPER, severity error) conflicts with analyzer
+   CA1707 (no underscores in externally visible members), which had driven T06 to PascalCase
+   public constants; (b) private `static readonly` test fields (e.g. `EXPECTED_NAMES`) violate
+   `private_internal_fields_underscore` (`_camelCase`) — they are not `const`, so the ALL_UPPER
+   constants rule does not apply to them.
+
+Decision: the repo `.editorconfig` naming rules are the codified user standard and win over
+CA1707. Fix routed through Phase 4 as T20: disable CA1707 repo-wide in `.editorconfig`, rename
+public constants to ALL_UPPER, rename private static readonly test fields to `_camelCase`.
+
 ---
 
 ## Phase 2 — Impact analysis (sd-code-explorer, 2026-06-26)
@@ -97,3 +112,45 @@ definition files are NOT in this repo. `list_symbols` is the availability probe 
   naming `mcp__gitnexus__<snake_case>`; error `code` `ALL_UPPER_SNAKE` closed set; C# rules `== false`/
   `== true` over `!`, custom domain exceptions only, `Async` suffix + trailing `CancellationToken ct`,
   `#nullable enable`; test placement under `tests/`.
+
+## T13 — actual MCP SDK API (0.3.0-preview.4)
+
+Verified against the pinned packages on disk (`ModelContextProtocol` / `ModelContextProtocol.Core` /
+`ModelContextProtocol.AspNetCore` `0.3.0-preview.4`) via reflection probes, not memory. The
+plan's OQ-3 guess (`WithListToolsHandler` / `WithCallToolHandler` as builder extension methods)
+matched exactly; no deviation was required.
+
+- `Microsoft.Extensions.DependencyInjection.IMcpServerBuilder` — returned by
+  `services.AddMcpServer(...)` (extension in the same namespace, package `ModelContextProtocol`).
+- `Microsoft.Extensions.DependencyInjection.McpServerBuilderExtensions` (also package
+  `ModelContextProtocol`, namespace `Microsoft.Extensions.DependencyInjection`) exposes:
+  - `IMcpServerBuilder WithListToolsHandler(this IMcpServerBuilder builder, Func<RequestContext<ListToolsRequestParams>, CancellationToken, ValueTask<ListToolsResult>> handler)`
+  - `IMcpServerBuilder WithCallToolHandler(this IMcpServerBuilder builder, Func<RequestContext<CallToolRequestParams>, CancellationToken, ValueTask<CallToolResult>> handler)`
+  - Both are fluent (return the same builder) and, under the hood, set
+    `McpServerOptions.Capabilities.Tools.ListToolsHandler` / `.CallToolHandler` via the options
+    pipeline (confirmed by resolving `IOptions<McpServerOptions>>().Value.Capabilities.Tools.*Handler`
+    after calling the extension methods on a bare `ServiceCollection`).
+- `ModelContextProtocol.Server.RequestContext<TParams>` (package `ModelContextProtocol.Core`):
+  - `RequestContext(IMcpServer server)` — `server` is **non-nullable** (verified via
+    `NullabilityInfoContext`); it also reads `server.Services` inside the constructor to seed its
+    own `Services` default, so any `IMcpServer` fake used in tests must have a non-throwing
+    `Services` getter even if the test immediately overrides `Services` via object initializer.
+  - `Services` (`IServiceProvider?`) and `Params` (`TParams?`) are both **nullable** per
+    `NullabilityInfoContext`, even though the SDK always populates them for a real request; `Server`
+    is non-nullable.
+- `ModelContextProtocol.Protocol.Tool` — `Name`, `Description`, `InputSchema` (`JsonElement`) map
+  1:1 onto `IGitnexusTool`'s members; no schema translation needed.
+- `ModelContextProtocol.Protocol.CallToolRequestParams` — `Name` (non-nullable `string`),
+  `Arguments` (`IReadOnlyDictionary<string, JsonElement>?`, nullable).
+- `ModelContextProtocol.Protocol.CallToolResult` — `Content` (`IList<ContentBlock>`), `IsError`
+  (`bool?`). The adapter never sets `IsError`; both `ok:true` and `ok:false` envelopes are carried
+  as `Content`, never as a protocol-level error, per the plan's design guidance.
+- `ModelContextProtocol.Protocol.TextContentBlock` — `new TextContentBlock { Text = "..." }`
+  serializes as `{"type":"text","text":"..."}`; `Type` is fixed to `"text"` by the SDK, not
+  settable.
+- `IMcpServer` (package `ModelContextProtocol.Core`) extends `IMcpEndpoint` + `IAsyncDisposable`,
+  with 6 own members (`ClientCapabilities`, `ClientInfo`, `ServerOptions`, `Services`,
+  `LoggingLevel`, `RunAsync`) plus 4 inherited (`SessionId`, `SendRequestAsync`,
+  `SendMessageAsync`, `RegisterNotificationHandler`) — relevant only to the test fake, not
+  production code, since `McpHandlerAdapter`'s handlers read `RequestContext.Services` /
+  `RequestContext.Params`, never `RequestContext.Server`.

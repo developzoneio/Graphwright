@@ -3,6 +3,11 @@
     "atlassian": {
       "type": "http",
       "url": "https://mcp.atlassian.com/v1/mcp"
+    },
+    "gitnexus": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "src/Graphwright.McpServer", "--", "--transport", "stdio"]
     }
   }
 }

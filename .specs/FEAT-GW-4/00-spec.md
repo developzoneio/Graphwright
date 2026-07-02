@@ -1,7 +1,7 @@
 ---
 id: FEAT-GW-4
 type: feature
-status: approved
+status: done
 created: 2026-06-26
 ticket: GW-4
 ticket_url: https://trminhtrong.atlassian.net/browse/GW-4

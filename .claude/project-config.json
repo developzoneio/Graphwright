@@ -38,16 +38,16 @@
 
   "commands": {
     "build": "dotnet build Graphwright.sln -c Release",
-    "test": "<<e.g. dotnet test --no-build>>",
-    "lint": "<<e.g. dotnet format --verify-no-changes>>",
-    "coverage": "<<e.g. dotnet test /p:CollectCoverage=true>>",
-    "run": "<<e.g. dotnet run --project src/Graphwright.McpServer>>"
+    "test": "dotnet test Graphwright.sln",
+    "lint": "dotnet format Graphwright.sln --verify-no-changes",
+    "coverage": "dotnet test Graphwright.sln --collect:\"XPlat Code Coverage\"",
+    "run": "dotnet run --project src/Graphwright.McpServer"
   },
 
   "paths": {
     "src": "src",
     "tests": "tests",
-    "docs": "<<e.g. docs>>",
+    "docs": "docs",
     "layers": [
       { "name": "Domain", "path": "**/Graphwright.Domain/**" },
       { "name": "Application", "path": "**/Graphwright.Application/**" },

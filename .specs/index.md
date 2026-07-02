@@ -4,5 +4,5 @@ Active specs (auto-updated by /sd:spec status transitions):
 
 | ID | Type | Status | Created | Title |
 |---|---|---|---|---|
-| FEAT-GW-4 | feature | approved | 2026-06-26 | MCP server scaffold — transport, tool registry, error envelope |
+| FEAT-GW-4 | feature | done (2026-07-02) | 2026-06-26 | MCP server scaffold — transport, tool registry, error envelope |
 | FEAT-GW-26 | feature | done | 2026-06-26 | Scaffold solution structure (Clean Architecture) — sln, 4 projects, inward-only references |
