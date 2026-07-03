@@ -19,4 +19,13 @@ public interface ILanguageProvider
     /// best-effort or partial result on failure.
     /// </summary>
     Task<SymbolListResult> ListSymbolsAsync(ListSymbolsQuery query, CancellationToken ct);
+
+    /// <summary>
+    /// Reads the file content described by <paramref name="query"/> — whole file, an explicit
+    /// line range, or a bounded snippet around a line. Implementations raise
+    /// <see cref="Graphwright.Domain.Exceptions.GraphwrightException"/> subclasses for failure
+    /// cases (e.g. workspace not loaded, path not found); this method never returns a
+    /// best-effort or partial result on failure.
+    /// </summary>
+    Task<FileContentResult> GetFileAsync(GetFileQuery query, CancellationToken ct);
 }

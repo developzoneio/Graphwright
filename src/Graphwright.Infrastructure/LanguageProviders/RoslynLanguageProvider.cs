@@ -6,7 +6,9 @@ using System.Threading.Tasks;
 using Graphwright.Application.LanguageProviders;
 using Graphwright.Domain.Exceptions;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Graphwright.Infrastructure.LanguageProviders;
 
@@ -66,6 +68,229 @@ public sealed class RoslynLanguageProvider : ILanguageProvider
         var cappedResults = orderedSymbols.Take(query.MaxResults).ToList();
 
         return new SymbolListResult(cappedResults, truncated: totalFound > cappedResults.Count, totalFound);
+    }
+
+    public async Task<FileContentResult> GetFileAsync(GetFileQuery query, CancellationToken ct)
+    {
+        if (_snapshot.IsLoaded == false)
+        {
+            throw new WorkspaceNotLoadedException();
+        }
+
+        ArgumentNullException.ThrowIfNull(query);
+
+        ct.ThrowIfCancellationRequested();
+
+        // get_file has no include_generated argument, so a bin/obj/node_modules/*.g.cs path is
+        // treated as not-found, same server-side filter as list_symbols (Scenario 6 precedent).
+        var documents = ResolveScopedDocumentsOrThrow(query.Path, includeGenerated: false);
+        var document = documents[0];
+
+        var sourceText = await document.GetTextAsync(ct);
+        var totalLines = sourceText.Lines.Count;
+
+        // Explicit-range mode: StartLine and EndLine are always given as a pair (T07/GetFileTool
+        // guarantees this before the query is constructed), so their non-null-ness together
+        // selects this mode over whole-file (00-spec.md "What" — mutually exclusive modes).
+        if (query.StartLine != null && query.EndLine != null)
+        {
+            return BuildExplicitRangeResult(query, sourceText, totalLines);
+        }
+
+        // Bounded-snippet mode: AroundLine present selects a context window around that line
+        // (00-spec.md Scenario 3/4/10), boundary-snapped outward to whole statement/expression
+        // and member-header edges via the SyntaxTree (00-spec.md Scenario 11/15, 01-plan.md
+        // Decision D3).
+        if (query.AroundLine != null)
+        {
+            var syntaxRoot = await document.GetSyntaxRootAsync(ct);
+
+            return BuildBoundedSnippetResult(query, sourceText, totalLines, syntaxRoot);
+        }
+
+        // Whole-file mode: no StartLine/EndLine/AroundLine present on the query, so the entire
+        // document is served (00-spec.md Scenario 1).
+        return new FileContentResult(query.Path, startLine: 1, endLine: totalLines, totalLines, sourceText.ToString());
+    }
+
+    private static FileContentResult BuildExplicitRangeResult(GetFileQuery query, SourceText sourceText, int totalLines)
+    {
+        var startLine = query.StartLine!.Value;
+
+        // Scenario 9a: start_line itself beyond total_lines means the entire requested range
+        // names no real line at all — reject rather than silently clamp/invent a manufactured
+        // range (CLAUDE.md "No invented data").
+        if (startLine > totalLines)
+        {
+            throw new InvalidToolArgumentException(
+                "start_line", $"must not exceed the file's total line count ({totalLines}).");
+        }
+
+        // Scenario 9: end_line partially out of bounds clamps down to total_lines, symmetric
+        // with ListSymbolsTool.ValidateOptionalMaxResults's clamp-not-reject precedent
+        // (src/Graphwright.McpServer/Tools/ListSymbolsTool.cs:182-200).
+        var endLine = Math.Min(query.EndLine!.Value, totalLines);
+
+        var content = SliceLines(sourceText, startLine, endLine);
+
+        return new FileContentResult(query.Path, startLine, endLine, totalLines, content);
+    }
+
+    private static FileContentResult BuildBoundedSnippetResult(
+        GetFileQuery query, SourceText sourceText, int totalLines, SyntaxNode? syntaxRoot)
+    {
+        // 00-spec.md Scenario 10: clamp at the file's edges, never padded past them to force a
+        // fixed window count. This raw window is what 01-plan.md Decision D3's SyntaxTree
+        // boundary-snapping (below) expands outward from, never replacing it.
+        var rawStart = Math.Max(1, query.AroundLine!.Value - query.Context);
+        var rawEnd = Math.Min(totalLines, query.AroundLine.Value + query.Context);
+
+        // A null syntax root (mirrors ExtractDeclaredSymbolsAsync's defensive null-check style,
+        // RoslynLanguageProvider.cs:246-254) means no boundary information is available — the
+        // served window falls back to the raw, unexpanded one rather than crashing.
+        if (syntaxRoot == null)
+        {
+            var rawContent = SliceLines(sourceText, rawStart, rawEnd);
+
+            return new FileContentResult(query.Path, rawStart, rawEnd, totalLines, rawContent);
+        }
+
+        // 01-plan.md Decision D3: the MemberDeclarationSyntax enclosing AroundLine is the fixed
+        // hard ceiling for both edges' per-edge expansion below. Fixing this once (rather than
+        // re-deriving it per loop iteration) stops the loop at that member's own span even when
+        // an intermediate FindNode lookup — e.g. on a blank inter-member line, which belongs to
+        // no node's own Span at all — returns an outer ancestor such as the containing type
+        // declaration; expansion must never cross into a sibling member because of that.
+        var anchorLineSpan = sourceText.Lines[query.AroundLine.Value - 1].Span;
+        var anchorNode = syntaxRoot.FindNode(anchorLineSpan, findInsideTrivia: false, getInnermostNodeForTie: true);
+        var enclosingMember = anchorNode.FirstAncestorOrSelf<MemberDeclarationSyntax>() ?? anchorNode;
+        var memberLineSpan = enclosingMember.GetLocation().GetLineSpan();
+        var memberFloorLine = memberLineSpan.StartLinePosition.Line + 1;
+        var memberCeilingLine = memberLineSpan.EndLinePosition.Line + 1;
+
+        var expandedStart = ExpandStartLineOutward(syntaxRoot, sourceText, rawStart, memberFloorLine);
+        var expandedEnd = ExpandEndLineOutward(syntaxRoot, sourceText, rawEnd, memberCeilingLine);
+
+        // Scenario 15: header-region clamp, applied after per-edge expansion, scoped to
+        // BaseMethodDeclarationSyntax members only (D3 explicitly scopes out plain
+        // fields/auto-properties — a stated decision, not a gap).
+        var clampedEnd = enclosingMember is BaseMethodDeclarationSyntax methodMember
+            ? ApplyHeaderRegionClamp(methodMember, expandedStart, expandedEnd)
+            : expandedEnd;
+
+        var content = SliceLines(sourceText, expandedStart, clampedEnd);
+
+        return new FileContentResult(query.Path, expandedStart, clampedEnd, totalLines, content);
+    }
+
+    private static int ExpandStartLineOutward(
+        SyntaxNode syntaxRoot, SourceText sourceText, int rawStart, int memberFloorLine)
+    {
+        var currentStart = rawStart;
+
+        while (currentStart > memberFloorLine)
+        {
+            var lineSpan = sourceText.Lines[currentStart - 1].Span;
+            var node = syntaxRoot.FindNode(lineSpan, findInsideTrivia: false, getInnermostNodeForTie: true);
+            var nodeStartLine = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+
+            // The edge already sits on this node's own boundary — nothing left to expand. This
+            // is why Scenario 3/4's already-clean windows are never expanded.
+            if (nodeStartLine == currentStart)
+            {
+                return currentStart;
+            }
+
+            // The raw edge splits this node; expand outward and retry — the new, earlier edge
+            // may itself split a larger enclosing node (an if splits a block which splits a
+            // method body). Hard ceiling: never expand earlier than the enclosing member's span.
+            currentStart = Math.Max(nodeStartLine, memberFloorLine);
+        }
+
+        return currentStart;
+    }
+
+    private static int ExpandEndLineOutward(
+        SyntaxNode syntaxRoot, SourceText sourceText, int rawEnd, int memberCeilingLine)
+    {
+        var currentEnd = rawEnd;
+
+        while (currentEnd < memberCeilingLine)
+        {
+            var lineSpan = sourceText.Lines[currentEnd - 1].Span;
+            var node = syntaxRoot.FindNode(lineSpan, findInsideTrivia: false, getInnermostNodeForTie: true);
+            var nodeEndLine = node.GetLocation().GetLineSpan().EndLinePosition.Line + 1;
+
+            if (nodeEndLine == currentEnd)
+            {
+                return currentEnd;
+            }
+
+            // Hard ceiling: never expand later than the enclosing member's own span.
+            currentEnd = Math.Min(nodeEndLine, memberCeilingLine);
+        }
+
+        return currentEnd;
+    }
+
+    private static int ApplyHeaderRegionClamp(BaseMethodDeclarationSyntax methodMember, int start, int end)
+    {
+        var headerEndLine = GetHeaderEndLineOrNull(methodMember);
+
+        if (headerEndLine == null)
+        {
+            return end;
+        }
+
+        var memberStartLine = methodMember.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+
+        // Scenario 15: the window's start line falls within the member's own header (at or after
+        // the member's own start, at or before the header's own last line) but would otherwise
+        // extend into the member's Body/ExpressionBody — clamp endLine to the header's own last
+        // line, never pulling in the full body. A start line before the member even begins (e.g.
+        // still inside a preceding sibling or the enclosing type's own header) must never trigger
+        // this clamp — the window has nothing to do with this member's signature in that case.
+        if (start >= memberStartLine && start <= headerEndLine.Value && end > headerEndLine.Value)
+        {
+            return headerEndLine.Value;
+        }
+
+        return end;
+    }
+
+    private static int? GetHeaderEndLineOrNull(BaseMethodDeclarationSyntax methodMember)
+    {
+        SyntaxToken tokenBeforeBody;
+
+        if (methodMember.Body != null)
+        {
+            tokenBeforeBody = methodMember.Body.GetFirstToken().GetPreviousToken();
+        }
+        else if (methodMember.ExpressionBody != null)
+        {
+            tokenBeforeBody = methodMember.ExpressionBody.GetFirstToken().GetPreviousToken();
+        }
+        else if (methodMember.SemicolonToken.IsKind(SyntaxKind.SemicolonToken))
+        {
+            tokenBeforeBody = methodMember.SemicolonToken.GetPreviousToken();
+        }
+        else
+        {
+            // No Body/ExpressionBody/SemicolonToken present at all — nothing to clamp against.
+            return null;
+        }
+
+        return tokenBeforeBody.GetLocation().GetLineSpan().EndLinePosition.Line + 1;
+    }
+
+    private static string SliceLines(SourceText sourceText, int startLine, int endLine)
+    {
+        // 01-plan.md Decision D1: preserves every line break between the selected lines
+        // verbatim (never normalizes to Environment.NewLine), stopping at endLine's own .End
+        // so no extra blank line is invented past the requested range.
+        var span = TextSpan.FromBounds(sourceText.Lines[startLine - 1].Start, sourceText.Lines[endLine - 1].End);
+
+        return sourceText.GetSubText(span).ToString();
     }
 
     private static IEnumerable<DeclaredSymbol> FilterByNameAndKind(

@@ -22,6 +22,11 @@ public class ListSymbolsToolTests
         {
             throw new InvalidOperationException("must not be called");
         }
+
+        public Task<FileContentResult> GetFileAsync(GetFileQuery query, CancellationToken ct)
+        {
+            throw new InvalidOperationException("must not be called");
+        }
     }
 
     private sealed class CapturingLanguageProvider : ILanguageProvider
@@ -40,6 +45,13 @@ public class ListSymbolsToolTests
             CapturedQuery = query;
             return Task.FromResult(_result);
         }
+
+        public Task<FileContentResult> GetFileAsync(GetFileQuery query, CancellationToken ct)
+        {
+            throw new NotSupportedException(
+                "CapturingLanguageProvider.GetFileAsync is not exercised by get_file tests; this fake is " +
+                "list_symbols-specific.");
+        }
     }
 
     private sealed class ThrowingLanguageProvider : ILanguageProvider
@@ -54,6 +66,13 @@ public class ListSymbolsToolTests
         public Task<SymbolListResult> ListSymbolsAsync(ListSymbolsQuery query, CancellationToken ct)
         {
             throw _exception;
+        }
+
+        public Task<FileContentResult> GetFileAsync(GetFileQuery query, CancellationToken ct)
+        {
+            throw new NotSupportedException(
+                "ThrowingLanguageProvider.GetFileAsync is not exercised by get_file tests; this fake is " +
+                "list_symbols-specific.");
         }
     }
 

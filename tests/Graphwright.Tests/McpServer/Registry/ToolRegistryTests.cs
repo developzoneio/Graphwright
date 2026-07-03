@@ -21,6 +21,13 @@ public class ToolRegistryTests
                 "NeverInvokedLanguageProvider.ListSymbolsAsync should not be called by ToolRegistry tests, " +
                 "which exercise registry name/ordering/contract mechanics only, never ExecuteAsync.");
         }
+
+        public Task<FileContentResult> GetFileAsync(GetFileQuery query, CancellationToken ct)
+        {
+            throw new InvalidOperationException(
+                "NeverInvokedLanguageProvider.GetFileAsync should not be called by ToolRegistry tests, " +
+                "which exercise registry name/ordering/contract mechanics only, never ExecuteAsync.");
+        }
     }
 
     private sealed class FakeTool : IGitnexusTool

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Graphwright.Application.LanguageProviders;
 using Graphwright.Domain.Exceptions;
 using Graphwright.Infrastructure.LanguageProviders;
+using Microsoft.CodeAnalysis.Text;
 using Xunit;
 
 namespace Graphwright.Tests.Infrastructure.LanguageProviders;
@@ -525,5 +526,214 @@ namespace Acme.Various
 
         Assert.Equal(expectedOrder, firstCall.Results.Select(symbol => symbol.Name).ToArray());
         Assert.Equal(expectedOrder, secondCall.Results.Select(symbol => symbol.Name).ToArray());
+    }
+
+    [Fact]
+    public async Task GetFileAsyncThrowsWorkspaceNotLoadedExceptionForAnyArgumentShapeWhenSnapshotIsNotLoaded()
+    {
+        // Scenario 14 — workspace-not-ready is checked before any other work, for any argument
+        // shape (whole-file, explicit-range, or bounded-snippet), mirroring ListSymbolsAsync.
+        var provider = new RoslynLanguageProvider(RoslynWorkspaceSnapshot.NotLoaded());
+        var wholeFileQuery = new GetFileQuery("a/Foo.cs", null, null, null, context: 2);
+        var rangeQuery = new GetFileQuery("a/Foo.cs", 3, 6, null, context: 2);
+        var snippetQuery = new GetFileQuery("a/Foo.cs", null, null, 10, context: 2);
+
+        await Assert.ThrowsAsync<WorkspaceNotLoadedException>(
+            () => provider.GetFileAsync(wholeFileQuery, CancellationToken.None));
+        await Assert.ThrowsAsync<WorkspaceNotLoadedException>(
+            () => provider.GetFileAsync(rangeQuery, CancellationToken.None));
+        await Assert.ThrowsAsync<WorkspaceNotLoadedException>(
+            () => provider.GetFileAsync(snippetQuery, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetFileAsyncThrowsSourceFileNotFoundExceptionForAWellFormedPathWithNoMatchingDocument()
+    {
+        // Scenario 13 — well-formed path that does not exist in the workspace.
+        var snapshot = RoslynWorkspaceTestFixtures.Instance.BuildSnapshot(
+            ("a/Foo.cs", "namespace A { public class Foo { } }"),
+            ("b/Bar.cs", "namespace B { public class Bar { } }"));
+        var provider = new RoslynLanguageProvider(snapshot);
+        var query = new GetFileQuery("a/Missing.cs", null, null, null, context: 2);
+
+        var exception = await Assert.ThrowsAsync<SourceFileNotFoundException>(
+            () => provider.GetFileAsync(query, CancellationToken.None));
+
+        Assert.Equal("a/Missing.cs", exception.FilePath);
+    }
+
+    [Fact]
+    public async Task GetFileAsyncReturnsTheWholeFileWhenNoRangeOrAroundArgumentIsPresent()
+    {
+        // Scenario 1 — whole file: start_line 1, end_line/total_lines equal to the fixture's
+        // actual compiled line count (via SourceText.Lines.Count, not a hand-computed count),
+        // and content equal to the fixture's exact source text end-to-end.
+        var snapshot = RoslynWorkspaceTestFixtures.Instance.BuildSnapshot(("a/OrderService.cs", ORDER_SERVICE_SOURCE));
+        var provider = new RoslynLanguageProvider(snapshot);
+        var query = new GetFileQuery("a/OrderService.cs", null, null, null, context: 2);
+
+        var result = await provider.GetFileAsync(query, CancellationToken.None);
+
+        var expectedTotalLines = SourceText.From(ORDER_SERVICE_SOURCE).Lines.Count;
+
+        Assert.Equal("a/OrderService.cs", result.File);
+        Assert.Equal(1, result.StartLine);
+        Assert.Equal(expectedTotalLines, result.EndLine);
+        Assert.Equal(expectedTotalLines, result.TotalLines);
+        Assert.Equal(ORDER_SERVICE_SOURCE, result.Content);
+    }
+
+    [Fact]
+    public async Task GetFileAsyncReturnsExactlyTheRequestedRangeForAnInBoundsStartAndEndLine()
+    {
+        // Scenario 2 — explicit start_line 3 / end_line 6, asserted against the fixture's
+        // actual compiled text via 01-plan.md Decision D1's slicing rule.
+        var snapshot = RoslynWorkspaceTestFixtures.Instance.BuildSnapshot(("a/OrderService.cs", ORDER_SERVICE_SOURCE));
+        var provider = new RoslynLanguageProvider(snapshot);
+        var query = new GetFileQuery("a/OrderService.cs", 3, 6, null, context: 2);
+
+        var result = await provider.GetFileAsync(query, CancellationToken.None);
+
+        var sourceText = SourceText.From(ORDER_SERVICE_SOURCE);
+        var expectedSpan = TextSpan.FromBounds(sourceText.Lines[2].Start, sourceText.Lines[5].End);
+        var expectedContent = sourceText.GetSubText(expectedSpan).ToString();
+
+        Assert.Equal("a/OrderService.cs", result.File);
+        Assert.Equal(3, result.StartLine);
+        Assert.Equal(6, result.EndLine);
+        Assert.Equal(expectedContent, result.Content);
+    }
+
+    [Fact]
+    public async Task GetFileAsyncClampsEndLineToTotalLinesWhenOnlyEndLineOverflowsButStartLineIsInBounds()
+    {
+        // Scenario 9 — end_line greater than total_lines, start_line still in bounds: clamp
+        // end_line down to total_lines rather than reject (symmetry with
+        // ListSymbolsTool.ValidateOptionalMaxResults's clamp-not-reject precedent).
+        var snapshot = RoslynWorkspaceTestFixtures.Instance.BuildSnapshot(("a/OrderService.cs", ORDER_SERVICE_SOURCE));
+        var provider = new RoslynLanguageProvider(snapshot);
+        var totalLines = SourceText.From(ORDER_SERVICE_SOURCE).Lines.Count;
+        var query = new GetFileQuery("a/OrderService.cs", 3, totalLines + 100, null, context: 2);
+
+        var result = await provider.GetFileAsync(query, CancellationToken.None);
+
+        var sourceText = SourceText.From(ORDER_SERVICE_SOURCE);
+        var expectedSpan = TextSpan.FromBounds(sourceText.Lines[2].Start, sourceText.Lines[totalLines - 1].End);
+        var expectedContent = sourceText.GetSubText(expectedSpan).ToString();
+
+        Assert.Equal(3, result.StartLine);
+        Assert.Equal(totalLines, result.EndLine);
+        Assert.Equal(expectedContent, result.Content);
+    }
+
+    [Fact]
+    public async Task GetFileAsyncThrowsInvalidToolArgumentExceptionWhenStartLineItselfIsBeyondTotalLines()
+    {
+        // Scenario 9a — start_line itself beyond total_lines: the entire requested range names
+        // no real line at all, so it is rejected rather than clamped (contrast Scenario 9 above).
+        var snapshot = RoslynWorkspaceTestFixtures.Instance.BuildSnapshot(("a/OrderService.cs", ORDER_SERVICE_SOURCE));
+        var provider = new RoslynLanguageProvider(snapshot);
+        var totalLines = SourceText.From(ORDER_SERVICE_SOURCE).Lines.Count;
+        var query = new GetFileQuery("a/OrderService.cs", totalLines + 1, totalLines + 5, null, context: 2);
+
+        var exception = await Assert.ThrowsAsync<InvalidToolArgumentException>(
+            () => provider.GetFileAsync(query, CancellationToken.None));
+
+        Assert.Equal("start_line", exception.ArgumentName);
+    }
+
+    // Line 1: using System;
+    // Line 2: (blank)
+    // Line 3: namespace Acme.Snippets
+    // Line 4: {
+    // Line 5:     public class SnippetHost
+    // Line 6:     {
+    // Line 7:         public void Run() {
+    // Line 8:             var a = 1;
+    // Line 9:             var b = 2;
+    // Line 10:            var c = 3;
+    // Line 11:            var d = 4;
+    // Line 12:            var e = 5;
+    // Line 13:            var f = 6;
+    // Line 14:            var g = 7;
+    // Line 15:            var h = 8;
+    // Line 16:            var i = 9;
+    // Line 17:            var j = 10;
+    // Line 18:        }
+    // Line 19:    }
+    // Line 20: }
+    private const string SNIPPET_SOURCE = @"using System;
+
+namespace Acme.Snippets
+{
+    public class SnippetHost
+    {
+        public void Run() {
+            var a = 1;
+            var b = 2;
+            var c = 3;
+            var d = 4;
+            var e = 5;
+            var f = 6;
+            var g = 7;
+            var h = 8;
+            var i = 9;
+            var j = 10;
+        }
+    }
+}
+";
+
+    [Fact]
+    public async Task GetFileAsyncReturnsTheDefaultFiveLineWindowForABoundedSnippetOfSimpleStatements()
+    {
+        // Scenario 3 — bounded snippet with default context: lines 8-12 are each a single
+        // simple statement, so this task's raw clamped window is exactly the served window
+        // (SyntaxTree boundary-snapping is T06, layered on top later, not implemented here).
+        var snapshot = RoslynWorkspaceTestFixtures.Instance.BuildSnapshot(("a/Snippet.cs", SNIPPET_SOURCE));
+        var provider = new RoslynLanguageProvider(snapshot);
+        var query = new GetFileQuery("a/Snippet.cs", null, null, 10, context: 2);
+
+        var result = await provider.GetFileAsync(query, CancellationToken.None);
+
+        Assert.Equal(8, result.StartLine);
+        Assert.Equal(12, result.EndLine);
+    }
+
+    [Fact]
+    public async Task GetFileAsyncReturnsAnElevenLineWindowForABoundedSnippetWithExplicitContextFive()
+    {
+        // Scenario 4 — bounded snippet with explicit context 5: an 11-line window.
+        var snapshot = RoslynWorkspaceTestFixtures.Instance.BuildSnapshot(("a/Snippet.cs", SNIPPET_SOURCE));
+        var provider = new RoslynLanguageProvider(snapshot);
+        var query = new GetFileQuery("a/Snippet.cs", null, null, 10, context: 5);
+
+        var result = await provider.GetFileAsync(query, CancellationToken.None);
+
+        Assert.Equal(5, result.StartLine);
+        Assert.Equal(15, result.EndLine);
+    }
+
+    [Fact]
+    public async Task GetFileAsyncClampsTheBoundedSnippetWindowAtTheStartAndEndOfFileWithoutArtificialPadding()
+    {
+        // Scenario 10 — around_line 1 (and around_line N) with default context: the window
+        // clamps at the file's edges rather than being padded out to a fixed line count on the
+        // side that runs past the edge.
+        var snapshot = RoslynWorkspaceTestFixtures.Instance.BuildSnapshot(("a/Snippet.cs", SNIPPET_SOURCE));
+        var provider = new RoslynLanguageProvider(snapshot);
+        var totalLines = SourceText.From(SNIPPET_SOURCE).Lines.Count;
+
+        var startQuery = new GetFileQuery("a/Snippet.cs", null, null, 1, context: 2);
+        var startResult = await provider.GetFileAsync(startQuery, CancellationToken.None);
+
+        Assert.Equal(1, startResult.StartLine);
+        Assert.Equal(3, startResult.EndLine);
+
+        var endQuery = new GetFileQuery("a/Snippet.cs", null, null, totalLines, context: 2);
+        var endResult = await provider.GetFileAsync(endQuery, CancellationToken.None);
+
+        Assert.Equal(totalLines - 2, endResult.StartLine);
+        Assert.Equal(totalLines, endResult.EndLine);
     }
 }
