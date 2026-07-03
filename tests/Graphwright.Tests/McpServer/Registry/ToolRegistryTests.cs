@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Graphwright.Application.LanguageProviders;
 using Graphwright.McpServer.Contracts;
 using Graphwright.McpServer.Registry;
 using Graphwright.McpServer.Tools;
@@ -12,6 +13,16 @@ namespace Graphwright.Tests.McpServer.Registry;
 
 public class ToolRegistryTests
 {
+    private sealed class NeverInvokedLanguageProvider : ILanguageProvider
+    {
+        public Task<SymbolListResult> ListSymbolsAsync(ListSymbolsQuery query, CancellationToken ct)
+        {
+            throw new InvalidOperationException(
+                "NeverInvokedLanguageProvider.ListSymbolsAsync should not be called by ToolRegistry tests, " +
+                "which exercise registry name/ordering/contract mechanics only, never ExecuteAsync.");
+        }
+    }
+
     private sealed class FakeTool : IGitnexusTool
     {
         private static readonly JsonElement _cachedInputSchema = JsonDocument.Parse("{}").RootElement.Clone();
@@ -43,7 +54,7 @@ public class ToolRegistryTests
         {
             new SearchTool(),
             new GetCallGraphTool(),
-            new ListSymbolsTool(),
+            new ListSymbolsTool(new NeverInvokedLanguageProvider()),
             new FindReferencesTool(),
             new GetFileTool()
         };

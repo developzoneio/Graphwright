@@ -21,21 +21,21 @@ never in `src/Graphwright.Application/` or `src/Graphwright.McpServer/`.
 
 ## Checklist
 
-- [ ] T01 — `ILanguageProvider` + DTOs (Application)
-- [ ] T02 — `SymbolKindWireMapper` (McpServer)
-- [ ] T03 — `RoslynWorkspaceSnapshot` + in-memory `AdhocWorkspace` test-fixture builder (Infrastructure)
-- [ ] T04 — `RoslynLanguageProvider`: scope resolution + WorkspaceNotLoaded + FileNotFound
-- [ ] T05 — `RoslynLanguageProvider`: symbol extraction core (single file)
-- [ ] T06 — `RoslynLanguageProvider`: directory/workspace scoping + generated-path exclusion
-- [ ] T07 — `RoslynLanguageProvider`: name_filter, kinds filter, ordering, cap/truncation
-- [ ] T08 — `ListSymbolsTool`: new schema, validation, `ILanguageProvider` wiring
-- [ ] T09 — `InfrastructureModule` registers the real (unloaded) `ILanguageProvider`
-- [ ] T10 — Fix `McpServerModuleTests` composition helper
-- [ ] T11 — Fix `ToolDispatcherTests` (swap `ListSymbolsTool` for `GetFileTool`)
-- [ ] T12 — Fix `ToolRegistryTests` (add a never-invoked `ILanguageProvider` fake)
-- [ ] T13 — Split `StubToolTests` (drop the `ListSymbolsTool` row)
-- [ ] T14 — End-to-end WORKSPACE_NOT_LOADED test + Scenario-12 structural proxy
-- [ ] T15 — Create `mcp-contract.md` with `list_symbols` as its first entry
+- [x] T01 — `ILanguageProvider` + DTOs (Application)
+- [x] T02 — `SymbolKindWireMapper` (McpServer)
+- [x] T03 — `RoslynWorkspaceSnapshot` + in-memory `AdhocWorkspace` test-fixture builder (Infrastructure)
+- [x] T04 — `RoslynLanguageProvider`: scope resolution + WorkspaceNotLoaded + FileNotFound
+- [x] T05 — `RoslynLanguageProvider`: symbol extraction core (single file)
+- [x] T06 — `RoslynLanguageProvider`: directory/workspace scoping + generated-path exclusion
+- [x] T07 — `RoslynLanguageProvider`: name_filter, kinds filter, ordering, cap/truncation
+- [x] T08 — `ListSymbolsTool`: new schema, validation, `ILanguageProvider` wiring
+- [x] T09 — `InfrastructureModule` registers the real (unloaded) `ILanguageProvider`
+- [x] T10 — Fix `McpServerModuleTests` composition helper
+- [x] T11 — Fix `ToolDispatcherTests` (swap `ListSymbolsTool` for `GetFileTool`)
+- [x] T12 — Fix `ToolRegistryTests` (add a never-invoked `ILanguageProvider` fake)
+- [x] T13 — Split `StubToolTests` (drop the `ListSymbolsTool` row)
+- [x] T14 — End-to-end WORKSPACE_NOT_LOADED test + Scenario-12 structural proxy
+- [x] T15 — Create `mcp-contract.md` with `list_symbols` as its first entry
 
 ---
 

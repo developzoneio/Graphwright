@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
+using Graphwright.Application.LanguageProviders;
+using Graphwright.Infrastructure.LanguageProviders;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Graphwright.Infrastructure.DependencyInjection;
@@ -19,19 +21,21 @@ public sealed class InfrastructureModule
     }
 
     /// <summary>
-    /// Registers Infrastructure-layer services into <paramref name="services"/>. Implementations
-    /// arrive with the later GW-1 stories; the seam keeps Program.cs stable as Infrastructure
-    /// gains real services.
+    /// Registers Infrastructure-layer services into <paramref name="services"/>. This is the
+    /// first real registration: <see cref="RoslynWorkspaceSnapshot.NotLoaded"/> is registered
+    /// deliberately unloaded pending a future indexer story that loads and warms a real
+    /// workspace (00-spec.md "Out of scope"; 01-plan.md "Scope framing").
     /// </summary>
     [SuppressMessage(
         "Performance",
         "CA1822:Mark members as static",
         Justification = "Registrar seam is deliberately an instance member per project no-static-class " +
-            "convention (plan D2); implementations arrive in later GW-1 stories.")]
+            "convention (plan D2), mirroring McpServerModule.")]
     public void RegisterServices(IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Implementations arrive with the later GW-1 stories; the seam keeps Program.cs stable.
+        services.AddSingleton(RoslynWorkspaceSnapshot.NotLoaded());
+        services.AddSingleton<ILanguageProvider, RoslynLanguageProvider>();
     }
 }

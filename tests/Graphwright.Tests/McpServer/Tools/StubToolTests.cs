@@ -8,11 +8,11 @@ using Xunit;
 
 namespace Graphwright.Tests.McpServer.Tools;
 
+// Covers the 4 remaining stub tools (ListSymbolsTool has real behavior and is tested separately).
 public class StubToolTests
 {
     public static IEnumerable<object[]> StubTools()
     {
-        yield return new object[] { new ListSymbolsTool(), GitnexusToolNames.LIST_SYMBOLS, "file" };
         yield return new object[] { new GetFileTool(), GitnexusToolNames.GET_FILE, "path" };
         yield return new object[] { new FindReferencesTool(), GitnexusToolNames.FIND_REFERENCES, "symbol" };
         yield return new object[] { new GetCallGraphTool(), GitnexusToolNames.GET_CALL_GRAPH, "symbol" };

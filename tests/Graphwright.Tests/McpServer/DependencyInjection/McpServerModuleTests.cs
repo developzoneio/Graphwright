@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Graphwright.Infrastructure.DependencyInjection;
 using Graphwright.McpServer.DependencyInjection;
 using Graphwright.McpServer.Dispatch;
 using Graphwright.McpServer.Registry;
@@ -16,6 +17,7 @@ public class McpServerModuleTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        InfrastructureModule.Instance.RegisterServices(services);
         McpServerModule.Instance.RegisterServices(services);
 
         return services;

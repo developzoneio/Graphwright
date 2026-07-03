@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Graphwright.Infrastructure.DependencyInjection;
 using Graphwright.McpServer.DependencyInjection;
 using Graphwright.McpServer.Registry;
 using Graphwright.McpServer.Tools;
@@ -68,6 +69,7 @@ public class McpHandlerAdapterTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        InfrastructureModule.Instance.RegisterServices(services);
         McpServerModule.Instance.RegisterServices(services);
 
         var builder = services.AddMcpServer();
@@ -151,14 +153,14 @@ public class McpHandlerAdapterTests
     {
         using var provider = BuildConfiguredProvider();
         var callToolHandler = GetCallToolHandler(provider);
-        using var argumentsDocument = JsonDocument.Parse("""{"file":"src/Graphwright.Domain/Foo.cs"}""");
+        using var argumentsDocument = JsonDocument.Parse("""{"path":"src/Graphwright.Domain/Foo.cs"}""");
         var arguments = new Dictionary<string, JsonElement>
         {
-            ["file"] = argumentsDocument.RootElement.GetProperty("file").Clone(),
+            ["path"] = argumentsDocument.RootElement.GetProperty("path").Clone(),
         };
 
         var result = await callToolHandler(
-            CreateCallToolContext(provider, GitnexusToolNames.LIST_SYMBOLS, arguments), CancellationToken.None);
+            CreateCallToolContext(provider, GitnexusToolNames.GET_FILE, arguments), CancellationToken.None);
 
         var envelope = ParseSingleTextContentAsJson(result);
         Assert.False(envelope.GetProperty("ok").GetBoolean());

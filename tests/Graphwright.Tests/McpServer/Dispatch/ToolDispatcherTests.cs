@@ -90,7 +90,7 @@ public class ToolDispatcherTests
     [Fact]
     public async Task DispatchAsyncReturnsInvalidArgumentEnvelopeForStubToolWithBadArguments()
     {
-        var stubTool = new ListSymbolsTool();
+        var stubTool = new GetFileTool();
         var dispatcher = new ToolDispatcher(new[] { (IGitnexusTool)stubTool }, new RecordingLogger());
         using var missingRequiredArgument = JsonDocument.Parse("{}");
 
@@ -107,9 +107,9 @@ public class ToolDispatcherTests
     [Fact]
     public async Task DispatchAsyncReturnsInternalEnvelopeWithNotImplementedMessageForStubToolWithValidArguments()
     {
-        var stubTool = new ListSymbolsTool();
+        var stubTool = new GetFileTool();
         var dispatcher = new ToolDispatcher(new[] { (IGitnexusTool)stubTool }, new RecordingLogger());
-        using var validArguments = JsonDocument.Parse("""{"file":"src/Graphwright.Domain/Foo.cs"}""");
+        using var validArguments = JsonDocument.Parse("""{"path":"src/Graphwright.Domain/Foo.cs"}""");
 
         var result = await dispatcher.DispatchAsync(stubTool.Name, validArguments.RootElement, CancellationToken.None);
 

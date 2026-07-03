@@ -1,8 +1,9 @@
 ---
 id: FEAT-GW-5
 type: feature
-status: in-progress
+status: done
 created: 2026-07-02
+completed: 2026-07-03
 ticket: GW-5
 ticket_url: https://trminhtrong.atlassian.net/browse/GW-5
 ticket_snapshot: .specs/FEAT-GW-5/04-artifacts/ticket/GW-5.md
